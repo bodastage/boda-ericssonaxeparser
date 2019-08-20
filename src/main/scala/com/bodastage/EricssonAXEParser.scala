@@ -35,7 +35,7 @@ object EricssonAXEParser {
       import builder._
       OParser.sequence(
         programName("boda-ericssonaxeparser"),
-        head("boda-ericssonaxeparser", "0.0.3"),
+        head("boda-ericssonaxeparser", "0.0.1"),
         opt[File]('i', "in")
           .required()
           .valueName("<file>")
@@ -47,6 +47,7 @@ object EricssonAXEParser {
           )
           .text("input file or directory, required."),
         opt[File]('o', "out")
+		  .required()
           .valueName("<file>")
           .action((x, c) => c.copy(out = x))
           .validate(f =>
@@ -61,10 +62,7 @@ object EricssonAXEParser {
         note(sys.props("line.separator")),
         note("Parses Ericsson AXE dumps to csv."),
         note("Examples:"),
-        note("java -jar boda-ericssonaxeparser.jar -i FILENAME.xml"),
-        note("java -jar boda-ericssonaxeparser.jar -i FILENAME.gz"),
         note("java -jar boda-ericssonaxeparser.jar -i FILENAME.xml -o /path/to/folder"),
-        note("java -jar boda-ericssonaxeparser.jar -i FILENAME.gz -o /path/to/folder"),
         note(sys.props("line.separator")),
         note("Copyright (c) 2019 Bodastage Solutions(https://www.bodastage.com)")
 
