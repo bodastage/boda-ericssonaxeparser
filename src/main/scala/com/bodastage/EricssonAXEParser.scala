@@ -25,8 +25,13 @@ object EricssonAXEParser {
   
   var currentState : ParserStates = EXTRACTING_PARAMETERS;
   
+  //MO/Command and list of parameters 
   var moColumns = new HashMap[String, Array[String]]();
   var moPWs = new HashMap[String, PrintWriter]();
+  
+  //A count of the number of rows with parameter names per command session
+  //This is used to determine how to collect the values
+  var moParamRows = new HashMap[String, Int]();
 
   def main(args: Array[String]): Unit = {
 
@@ -35,7 +40,7 @@ object EricssonAXEParser {
       import builder._
       OParser.sequence(
         programName("boda-ericssonaxeparser"),
-        head("boda-ericssonaxeparser", "0.0.1"),
+        head("boda-ericssonaxeparser", "0.0.2"),
         opt[File]('i', "in")
           .required()
           .valueName("<file>")
@@ -85,14 +90,14 @@ object EricssonAXEParser {
     try{
 
       if(showVersion){
-        println("0.0.1")
+        println("0.0.2")
         sys.exit(0);
       }
 
       if(outFile != null) outputFolder = outFile.getAbsoluteFile().toString
 
 
-      this.processFileOrDirectory(inputFile)
+      this.processInputFileOrDir(inputFile)
 
     }catch{
       case ex: Exception => {
@@ -106,9 +111,9 @@ object EricssonAXEParser {
   /**
   * Run through parameter extraction and value extraction
   */
-  def processFile(fileName : String){
+  def processInputFileOrDir(fileName : String){
 	if(currentState == EXTRACTING_PARAMETERS){
-		parseFile(fileName)
+		processFileOrDirectory(fileName)
 		
 		currentState = EXTRACTING_VALUES;
 	}
@@ -132,7 +137,7 @@ object EricssonAXEParser {
 		
 	})
 	
-	parseFile(fileName)
+	processFileOrDirectory(fileName)
 	
 	//Close print writers 
 	moPWs.foreach( kv => kv._2.close());
@@ -164,7 +169,7 @@ object EricssonAXEParser {
     val isReadableDirectory = Files.isDirectory(file) & Files.isReadable(file)
 
     if (isRegularExecutableFile) {
-      this.processFile(inputPath)
+      this.parseFile(inputPath)
     }
 
     if (isReadableDirectory) {
@@ -174,7 +179,7 @@ object EricssonAXEParser {
       for(f:File <- fList){
         try {
           if( Files.isRegularFile(f.toPath)){
-            this.processFile(f.getAbsolutePath)
+            this.parseFile(f.getAbsolutePath)
           }else{
             println(s"${f.getAbsolutePath} is not a regular file. Skipping it.")
           }
@@ -227,7 +232,8 @@ object EricssonAXEParser {
 	//currentParamLine
 	var currParamLineValIdxes  = Array[Array[Int]]();
 	var currentSectionParamLines = new HashMap[String, Int]();
-
+	var cmdSectionParamLineCount : Int = 0;
+	
 	var responseReceptionInterrupted: Boolean = false;
 
 	//Command section line counter. 
@@ -246,8 +252,6 @@ object EricssonAXEParser {
     for (line <- Source.fromFile(fileName).getLines) {
       lineCount += 1;
 	  //println(s"${line}")
-	  
-	  //if(lineCount == 35) sys.exit(0)
 	  
       breakable {
 		
@@ -283,9 +287,14 @@ object EricssonAXEParser {
 		 
 		//Reset 
 		if(line.trim == "END"){
+			
+			if(currentState == EXTRACTING_PARAMETERS && cmdSectionParamLineCount > 0){
+				moParamRows.replace(sectionCommand, cmdSectionParamLineCount)
+			}
+			
 			//Printout the last values
-			if( paramValues.length > 0 && sectionCommand.length > 0 ) {			
-				if(moPWs.containsKey(sectionCommand)){
+			if( paramValues.length > 0 && sectionCommand.length > 0 && currentState == EXTRACTING_VALUES) {			
+				if(moPWs.containsKey(sectionCommand) && moParamRows.get(sectionCommand) > 1){
 					moPWs.get(sectionCommand).println(
 						s"${toCSVFormat(fileBaseName)}," + 
 						s"${currentDateTime}," + 
@@ -303,6 +312,7 @@ object EricssonAXEParser {
 			sectionMML = "";
 			paramSecStartLine = "";
 			currentParamLine = "";
+			inParamSection = false;
 			
 			break;
 		}
@@ -324,12 +334,19 @@ object EricssonAXEParser {
 			sectionCommand = (pattern findFirstIn line).get.trim.toUpperCase
 			sectionMML = line.trim.replaceAll("^<|;$", "")
 			
+			if(currentState == EXTRACTING_PARAMETERS && cmdSectionParamLineCount > 0){
+				moParamRows.replace(sectionCommand, cmdSectionParamLineCount)
+			}
+			
+			//Reset 
+			cmdSectionParamLineCount = 0
+			
 			if(currentState == EXTRACTING_PARAMETERS){
 				if(!moColumns.containsKey(sectionCommand)){
 					moColumns.put(sectionCommand, Array[String]());
+					moParamRows.put(sectionCommand, 0)
 				}
 			}
-			
 						
 			//Set parameter values array to empty string at beginning of command section
 			if(currentState == EXTRACTING_VALUES){
@@ -338,12 +355,10 @@ object EricssonAXEParser {
 			
 			break;
 		}
-
-
 		
 		//If we encouter the paramSecStartLine line 
 		//End of parameter section 
-		if(line.trim == paramSecStartLine.trim && line.trim.length > 0 ){			
+		if(line.trim == paramSecStartLine.trim && line.trim.length > 0){			
 			//Print values to file 
 			
 			if(currentState == EXTRACTING_VALUES){
@@ -361,7 +376,6 @@ object EricssonAXEParser {
 			//Cliear repeatition tracker
 			currentSectionParamLines.clear()
 			
-
 		}
 		
 		//Get the parameter values 
@@ -372,6 +386,7 @@ object EricssonAXEParser {
 			//println("currentLineParams:" + currentLineParams.mkString(","))
 			//println("value indices:" + currParamLineValIdxes.map( m => m.mkString("-")).mkString(",") )
 			//println(s"paramValues count: ${paramValues.length}")
+			//println(s"moParamRows.get(sectionCommand): ${moParamRows.get(sectionCommand)}")
 						
 			for(i <- 0 to currentLineParams.length-1){
 			
@@ -388,6 +403,19 @@ object EricssonAXEParser {
 					
 					paramValues(indexInParamArray) = value
 				}
+			}
+			
+			//Print values for commands with 1 parameter line 
+			if(moParamRows.get(sectionCommand) == 1 ){
+				moPWs.get(sectionCommand).println(
+					s"${toCSVFormat(fileBaseName)}," + 
+					s"${currentDateTime}," + 
+					s"${nodename}," + 
+					s"${toCSVFormat(sectionMML)}," + 
+					paramValues.mkString(","));
+
+				//Reset parameter values
+				paramValues = moColumns.get(sectionCommand).map( v => "")
 			}
 		}
 		
@@ -428,7 +456,8 @@ object EricssonAXEParser {
 		}
 
 		//Collect parameters
-		if(currentState == EXTRACTING_PARAMETERS && inParamSection == true && line.length > 0 && prevLine.length == 0){
+		if(currentState == EXTRACTING_PARAMETERS && inParamSection == true 
+			&& line.length > 0 && prevLine.length == 0){
 			currentParamLine = line;
 			var paramsInLine = line.split("\\s{2}").map(v => v.trim).filter(v => v.length > 0)
 			var parameters = moColumns.get(sectionCommand)
@@ -439,6 +468,9 @@ object EricssonAXEParser {
 				}
 			}
 			
+			//
+			cmdSectionParamLineCount += 1
+			
 			//Add parameter to moColumns 
 			moColumns.replace(sectionCommand, parameters);
 			
@@ -447,13 +479,13 @@ object EricssonAXEParser {
 		//Collect parameter VALUES
 		if(currentState == EXTRACTING_VALUES && inParamSection == true && line.length > 0 && prevLine.length == 0){
 			currentParamLine = line;
-			
+
 			//Current parameter line parameters 
 			currentLineParams = currentParamLine.split("\\s{2}").map(v => v.trim).filter(v => v.length > 0)
 			currParamLineValIdxes = Array[Array[Int]]()
 			for(i <- 0 to currentLineParams.length-1){
 				val startIdx = if(i == 0) 0 else line.indexOf(currentLineParams(i))
-				val endIdx = if(i < currentLineParams.length-1) line.indexOf(currentLineParams(i+1)) - startIdx else line.length
+				val endIdx = if(i < currentLineParams.length-1) line.indexOf(currentLineParams(i+1)) else line.length
 				currParamLineValIdxes = currParamLineValIdxes :+  Array(startIdx, endIdx)
 			}
 			
