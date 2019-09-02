@@ -1,0 +1,25 @@
+<RLDEP:CELL=ALL;
+
+CELL  LAC   MULTIVALUED
+123A  1111  0
+             78
+
+CELL  LAC   MULTIVALUED
+123B  2222   1
+             70
+			 
+END
+
+DATETIME:151111070524WED
+
+Run stopped: Normal Program Termination
+
+-------------------------------------
+    Command file execution report
+-------------------------------------
+       Date: Nov 11, 2015 7:05:24 AM
+       User: prcdsafe
+ Session id: 9317
+ Start file: /home/prc/prcdsafe/fin-10/DBTSP.BLBSC2
+ Ext System: BLBSC2 
+Description: Normal program termination
