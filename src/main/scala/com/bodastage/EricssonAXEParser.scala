@@ -270,16 +270,15 @@ object EricssonAXEParser {
 			//Get date from execution summary
 			if("\\s+Date:\\s+.*".r.findAllIn(line).length > 0 ){
 				val pattern = "\\s+Date:\\s+(.*)".r
-				currentDateTime = (pattern findFirstIn line).get.trim			
+				currentDateTime = toCSVFormat( (pattern findFirstIn line).get.trim )			
 			}			
 			
 			//Get nodename from execution summary
 			if("\\s+Ext\\s+System:\\s+.*".r.findAllIn(line).length > 0 ){
 				val pattern = "\\s+Ext\\s+System:\\s+(.*)".r
 				val pattern(nd) = line
-				nodename = nd.trim
+				nodename = toCSVFormat(nd.trim)
 			}		
-			
 		}
 
 	  
@@ -325,7 +324,11 @@ object EricssonAXEParser {
 						s"${nodename}," + 
 						s"${toCSVFormat(sectionMML)}," + 
 						paramValues.mkString(","));
+						
+						
+					paramValues = paramValues.map( v => "")
 				}
+				
 			}
 			
 			paramValues = Array[String]();
@@ -394,7 +397,7 @@ object EricssonAXEParser {
 					paramValues.mkString(","));
 
 				//Reset parameter values
-				paramValues = moColumns.get(sectionCommand).map( v => "")
+				paramValues = paramValues.map( v => "")
 			}
 			
 			//Cliear repeatition tracker
@@ -428,15 +431,29 @@ object EricssonAXEParser {
 					//Current value
 					val currVal = paramValues(indexInParamArray)
 					var newValue = value;
-					if ( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length > 0 ) {
-						newValue = s"${currVal};${value}" 
-					}else if( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length == 0) {
-						newValue = currVal
-					}
-					else {
-						newValue  = value
-					} 
 					
+					/*
+					if(moParamRows.get(sectionCommand) > 1){
+						if ( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length > 0 ) {
+							newValue = s"${currVal};${value}" 
+						}else if( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length == 0) {
+							newValue = currVal
+						}
+						else {
+							newValue  = value
+						}
+					}*/
+					
+					if(prevLine.trim.length > 0 && prevLine2.trim.length > 0 && moParamRows.get(sectionCommand) > 1 ){
+						//if ( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length > 0 ) {
+							newValue = s"${currVal};${value}" 
+						//}else if( currVal.replaceAll("\\s+","").trim.length > 0 && value.replaceAll("\\s+","").trim.length == 0) {
+						//	newValue = currVal
+						//}
+						//else {
+						//	newValue  = value
+						//}
+					}
 					paramValues(indexInParamArray) = newValue
 				}
 			}
@@ -451,7 +468,7 @@ object EricssonAXEParser {
 					paramValues.mkString(","));
 
 				//Reset parameter values
-				paramValues = moColumns.get(sectionCommand).map( v => "")
+				paramValues = paramValues.map( v => "")
 			}
 		}
 		
@@ -484,6 +501,7 @@ object EricssonAXEParser {
 						s"${toCSVFormat(sectionMML)}," + 
 						paramValues.mkString(","));
 						
+					//paramValues = paramValues.map( v => "")	
 					currentSectionParamLines.clear();	
 						
 				}
@@ -520,8 +538,10 @@ object EricssonAXEParser {
 			currentLineParams = currentParamLine.split("\\s{2}").map(v => v.trim).filter(v => v.length > 0)
 			currParamLineValIdxes = Array[Array[Int]]()
 			for(i <- 0 to currentLineParams.length-1){
-				val startIdx = if(i == 0) 0 else line.indexOf(currentLineParams(i))
-				val endIdx = if(i < currentLineParams.length-1) line.indexOf(currentLineParams(i+1)) else line.length
+				//we look for the index of \s{2}PARAMETER 
+				val startIdx = if(i == 0) 0 else line.indexOf(" " + currentLineParams(i)) + 1
+				
+				val endIdx = if(i < currentLineParams.length-1) line.indexOf(" " + currentLineParams(i+1)) + 1 else line.length
 				currParamLineValIdxes = currParamLineValIdxes :+  Array(startIdx, endIdx)
 			}
 			
